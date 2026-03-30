@@ -4,13 +4,20 @@
     <LangVersion>latest</LangVersion>
     <Authors>Holger Huckfeldt</Authors>
     <Company>Holger Huckfeldt</Company>
-    <RepositoryUrl>https://github.com/HolgerHuckfeldt/OttoMapper</RepositoryUrl>
+    <RepositoryUrl>https://github.com/HolgerTheHuck/OttoMapper</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
-    <PackageProjectUrl>https://github.com/HolgerHuckfeldt/OttoMapper</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/HolgerTheHuck/OttoMapper</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>mapping automapper object-mapper dto aspnetcore dependency-injection</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Copyright>Copyright (c) Holger Huckfeldt</Copyright>
+    <!-- SourceLink for deterministic builds and NuGet symbol support -->
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
 </Project>

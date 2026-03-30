@@ -2,6 +2,10 @@
 
 OttoMapper is a fast object mapping library for .NET with an API that is intentionally close to common AutoMapper usage patterns.
 
+### Why "Otto"?
+
+Otto is a quintessentially German name — and so is the author. OttoMapper is a lightweight alternative to **Auto**Mapper, so think of it as the _Teutonic_ take on object mapping. A pun, basically.
+
 ## Packages
 
 - `OttoMapper.Mapping` - core mapping engine
@@ -66,7 +70,7 @@ builder.Services.AddOttoMapper(cfg =>
 
 ## Notes
 
-OttoMapper aims to be close enough to AutoMapper for common Web API and DTO mapping scenarios, while staying lightweight and performance-focused. It does not aim for full feature parity.
+OttoMapper is **not** a drop-in replacement for AutoMapper. It covers the mapping scenarios you typically encounter in Web APIs and DTO layers — `CreateMap`, profiles, `ForMember`/`ForPath`, conditions, reverse maps, hooks, nested and collection mapping — but it deliberately does not aim for full feature parity. If your project uses only the common subset of AutoMapper's API, OttoMapper can be a lightweight, performance-focused alternative.
 
 ## License
 
@@ -74,4 +78,4 @@ OttoMapper is licensed under the MIT License. See the `LICENSE` file in the repo
 
 ## Repository
 
-<https://github.com/HolgerHuckfeldt/OttoMapper>
+<https://github.com/HolgerTheHuck/OttoMapper>
