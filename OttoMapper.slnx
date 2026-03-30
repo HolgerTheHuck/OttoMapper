@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="OttoMapper.Mapping/OttoMapper.Mapping.csproj" />
+  <Project Path="OttoMapper.Extensions/OttoMapper.Extensions.csproj" />
+  <Project Path="OttoMapper.Tests/OttoMapper.Tests.csproj" />
+</Solution>

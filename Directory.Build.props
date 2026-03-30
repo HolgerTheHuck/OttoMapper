@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <SlnRoot>$(MSBuildThisFileDirectory)</SlnRoot>
+    <LangVersion>latest</LangVersion>
+    <Authors>Holger Huckfeldt</Authors>
+    <Company>Holger Huckfeldt</Company>
+    <RepositoryUrl>https://github.com/HolgerHuckfeldt/OttoMapper</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageProjectUrl>https://github.com/HolgerHuckfeldt/OttoMapper</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>mapping automapper object-mapper dto aspnetcore dependency-injection</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Copyright>Copyright (c) Holger Huckfeldt</Copyright>
+  </PropertyGroup>
+</Project>
