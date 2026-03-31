@@ -11,12 +11,6 @@ namespace OttoMapper.Mapping
     public class MapperConfiguration : IMapperConfiguration
     {
         internal readonly List<TypeMap> TypeMaps = new List<TypeMap>();
-        private volatile bool _frozen;
-
-        /// <summary>
-        /// Gets a value indicating whether this configuration has been frozen by a call to <see cref="BuildMapper"/>.
-        /// </summary>
-        public bool IsFrozen => _frozen;
 
         /// <summary>
         /// Gets or sets a value indicating whether non-collection maps must be registered explicitly.
@@ -46,7 +40,6 @@ namespace OttoMapper.Mapping
         /// <inheritdoc />
         public IMappingExpression<TSource, TDestination> CreateMap<TSource, TDestination>(Action<IMappingExpression<TSource, TDestination>>? mapping = null)
         {
-            ThrowIfFrozen();
             var expression = CreateMapExpression<TSource, TDestination>();
             mapping?.Invoke(expression);
             return expression;
@@ -70,7 +63,6 @@ namespace OttoMapper.Mapping
                 throw new ArgumentNullException(nameof(profile));
             }
 
-            ThrowIfFrozen();
             profile.ApplyTo(this);
         }
 
@@ -84,7 +76,6 @@ namespace OttoMapper.Mapping
                 throw new ArgumentNullException(nameof(assemblies));
             }
 
-            ThrowIfFrozen();
             foreach (var assembly in assemblies.Where(a => a != null))
             {
                 foreach (var profileType in assembly.GetTypes().Where(t => typeof(Profile).IsAssignableFrom(t) && !t.IsAbstract))
@@ -103,9 +94,6 @@ namespace OttoMapper.Mapping
         /// <inheritdoc />
         public IMapper BuildMapper(bool warmUp = true)
         {
-            AssertConfigurationIsValid();
-            _frozen = true;
-
             var mapper = new Mapper(this);
             if (warmUp)
             {
@@ -116,6 +104,12 @@ namespace OttoMapper.Mapping
             }
 
             return mapper;
+        }
+
+        /// <inheritdoc />
+        public IMapper CreateMapper()
+        {
+            return BuildMapper();
         }
 
         /// <inheritdoc />
@@ -216,14 +210,6 @@ namespace OttoMapper.Mapping
             }
 
             return new MappingExpression<TSource, TDestination>(this, typeMap);
-        }
-
-        private void ThrowIfFrozen()
-        {
-            if (_frozen)
-            {
-                throw new InvalidOperationException("Cannot modify a MapperConfiguration after BuildMapper() has been called. Create a new MapperConfiguration instance instead.");
-            }
         }
     }
 }

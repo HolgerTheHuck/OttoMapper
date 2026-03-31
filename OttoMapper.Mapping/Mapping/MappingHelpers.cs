@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 namespace OttoMapper.Mapping
 {
@@ -26,9 +27,157 @@ namespace OttoMapper.Mapping
                 || candidateType == typeof(Guid);
         }
 
+        public static bool IsNumericType(Type type)
+        {
+            var candidateType = Nullable.GetUnderlyingType(type) ?? type;
+            switch (Type.GetTypeCode(candidateType))
+            {
+                case TypeCode.Byte:
+                case TypeCode.SByte:
+                case TypeCode.UInt16:
+                case TypeCode.UInt32:
+                case TypeCode.UInt64:
+                case TypeCode.Int16:
+                case TypeCode.Int32:
+                case TypeCode.Int64:
+                case TypeCode.Decimal:
+                case TypeCode.Double:
+                case TypeCode.Single:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public static bool CanConvertSimpleType(Type sourceType, Type destinationType)
+        {
+            var sourceCandidate = Nullable.GetUnderlyingType(sourceType) ?? sourceType;
+            var destinationCandidate = Nullable.GetUnderlyingType(destinationType) ?? destinationType;
+
+            if (sourceCandidate == destinationCandidate)
+            {
+                return true;
+            }
+
+            if (sourceCandidate.IsEnum && destinationCandidate.IsEnum)
+            {
+                return true;
+            }
+
+            if (sourceCandidate.IsEnum && IsNumericType(destinationCandidate))
+            {
+                return true;
+            }
+
+            if (destinationCandidate.IsEnum && IsNumericType(sourceCandidate))
+            {
+                return true;
+            }
+
+            return IsNumericType(sourceCandidate) && IsNumericType(destinationCandidate);
+        }
+
+        public static object? ConvertSimpleValue(object? value, Type destinationType)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            var destinationCandidate = Nullable.GetUnderlyingType(destinationType) ?? destinationType;
+            var sourceCandidate = value.GetType();
+
+            if (destinationCandidate.IsAssignableFrom(sourceCandidate))
+            {
+                return value;
+            }
+
+            if (destinationCandidate.IsEnum)
+            {
+                if (value is string enumName)
+                {
+                    return Enum.Parse(destinationCandidate, enumName, ignoreCase: true);
+                }
+
+                var enumUnderlyingType = Enum.GetUnderlyingType(destinationCandidate);
+                var numericValue = Convert.ChangeType(value, enumUnderlyingType);
+                return Enum.ToObject(destinationCandidate, numericValue!);
+            }
+
+            if (sourceCandidate.IsEnum)
+            {
+                var sourceUnderlyingType = Enum.GetUnderlyingType(sourceCandidate);
+                var numericValue = Convert.ChangeType(value, sourceUnderlyingType);
+                return Convert.ChangeType(numericValue, destinationCandidate);
+            }
+
+            return Convert.ChangeType(value, destinationCandidate);
+        }
+
         public static bool CanBeNull(Type type)
         {
             return !type.IsValueType || Nullable.GetUnderlyingType(type) != null;
+        }
+
+        public static object CreateObjectInstance(Type type)
+        {
+            if (type.IsValueType)
+            {
+                return Activator.CreateInstance(type)!;
+            }
+
+            if (type.IsEnum)
+            {
+                return Enum.ToObject(type, 0);
+            }
+
+            if (type.IsAbstract || type.IsInterface)
+            {
+                throw new InvalidOperationException($"Destination type '{type.FullName}' cannot be instantiated.");
+            }
+
+            var constructors = type
+                .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .OrderBy(c => c.IsPublic ? 0 : 1)
+                .ThenBy(c => c.GetParameters().Length)
+                .ToArray();
+
+            foreach (var constructor in constructors)
+            {
+                try
+                {
+                    var args = CreateConstructorArguments(constructor.GetParameters());
+                    return constructor.Invoke(args);
+                }
+                catch
+                {
+                }
+            }
+
+            throw new InvalidOperationException($"Destination type '{type.FullName}' could not be instantiated. Provide ConstructUsing() if constructor arguments are required.");
+        }
+
+        private static object?[] CreateConstructorArguments(ParameterInfo[] parameters)
+        {
+            var args = new object?[parameters.Length];
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                if (parameters[i].HasDefaultValue)
+                {
+                    args[i] = parameters[i].DefaultValue;
+                }
+                else
+                {
+                    args[i] = GetDefaultValue(parameters[i].ParameterType);
+                }
+            }
+
+            return args;
+        }
+
+        private static object? GetDefaultValue(Type type)
+        {
+            return type.IsValueType ? Activator.CreateInstance(type) : null;
         }
 
         public static Type? GetEnumerableElementType(Type type)

@@ -70,10 +70,58 @@ public class CompatibilityTests
             cfg.CreateMap<SourceDto, DestinationDto>();
         });
 
-        var mapper = config.BuildMapper();
+        var mapper = config.CreateMapper();
         var result = mapper.Map<DestinationDto>(new SourceDto { Name = "generic-object" });
 
         Assert.Equal("generic-object", result.Name);
+    }
+
+    [Fact]
+    public void CreateMapper_Should_Be_Available_As_AutoMapper_Like_Alias()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<SourceDto, DestinationDto>();
+        });
+
+        var mapper = config.CreateMapper();
+        var result = mapper.Map<SourceDto, DestinationDto>(new SourceDto { Name = "alias" });
+
+        Assert.Equal("alias", result.Name);
+    }
+
+    [Fact]
+    public void Map_Should_Support_Existing_Destination_Instance()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<SourceDto, DestinationDto>();
+        });
+
+        var mapper = config.CreateMapper();
+        var destination = new DestinationDto { Name = "old", Ignored = "keep" };
+        var result = mapper.Map(new SourceDto { Name = "updated", Ignored = "copied" }, destination);
+
+        Assert.Same(destination, result);
+        Assert.Equal("updated", destination.Name);
+        Assert.Equal("copied", destination.Ignored);
+    }
+
+    [Fact]
+    public void Map_Object_Should_Support_Existing_Destination_Instance()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<SourceDto, DestinationDto>();
+        });
+
+        var mapper = config.CreateMapper();
+        object destination = new DestinationDto { Name = "old", Ignored = "keep" };
+        var result = mapper.Map(new SourceDto { Name = "runtime", Ignored = "updated" }, destination);
+
+        Assert.Same(destination, result);
+        Assert.Equal("runtime", ((DestinationDto)destination).Name);
+        Assert.Equal("updated", ((DestinationDto)destination).Ignored);
     }
 
     [Fact]
@@ -112,6 +160,22 @@ public class CompatibilityTests
     }
 
     [Fact]
+    public void ReverseMap_Should_Copy_Simple_MapFrom_Member()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<ReverseMemberSource, ReverseMemberDestination>()
+                .ForMember(d => d.Name, opt => opt.MapFrom(s => s.DisplayName))
+                .ReverseMap();
+        });
+
+        var mapper = config.BuildMapper();
+        var result = mapper.Map<ReverseMemberDestination, ReverseMemberSource>(new ReverseMemberDestination { Name = "mapped-back" });
+
+        Assert.Equal("mapped-back", result.DisplayName);
+    }
+
+    [Fact]
     public void RequireExplicitMaps_Should_Validate_Nested_Mappings()
     {
         var config = new MapperConfiguration(cfg =>
@@ -122,6 +186,38 @@ public class CompatibilityTests
 
         var ex = Assert.Throws<InvalidOperationException>(() => config.AssertConfigurationIsValid());
         Assert.Contains("Missing explicit map", ex.Message);
+    }
+
+    [Fact]
+    public void Map_Should_Convert_Enum_To_Int_And_Back()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<EnumSource, EnumDestination>();
+            cfg.CreateMap<EnumDestination, EnumSource>();
+        });
+
+        var mapper = config.CreateMapper();
+        var enumToInt = mapper.Map<EnumSource, EnumDestination>(new EnumSource { Status = PreisTyp.Premium });
+        var intToEnum = mapper.Map<EnumDestination, EnumSource>(new EnumDestination { Status = 2 });
+
+        Assert.Equal(2, enumToInt.Status);
+        Assert.Equal(PreisTyp.Premium, intToEnum.Status);
+    }
+
+    [Fact]
+    public void Map_Should_Create_Destination_Without_Public_Parameterless_Constructor()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<SourceDto, DestinationWithoutPublicCtor>();
+        });
+
+        var mapper = config.CreateMapper();
+        var result = mapper.Map<SourceDto, DestinationWithoutPublicCtor>(new SourceDto { Name = "constructed" });
+
+        Assert.NotNull(result);
+        Assert.Equal("constructed", result.Name);
     }
 
     [Fact]
@@ -138,7 +234,7 @@ public class CompatibilityTests
     }
 
     [Fact]
-    public void Config_Should_Throw_When_Modified_After_BuildMapper()
+    public void Config_Should_Allow_Modification_After_BuildMapper()
     {
         var config = new MapperConfiguration(cfg =>
         {
@@ -146,10 +242,39 @@ public class CompatibilityTests
         });
 
         config.BuildMapper();
+        config.CreateMap<ReverseSource, ReverseDestination>();
 
-        Assert.True(config.IsFrozen);
-        var ex = Assert.Throws<InvalidOperationException>(() => config.CreateMap<ReverseSource, ReverseDestination>());
-        Assert.Contains("BuildMapper", ex.Message);
+        var mapper = config.BuildMapper();
+        var result = mapper.Map<ReverseSource, ReverseDestination>(new ReverseSource { Name = "later" });
+
+        Assert.Equal("later", result.Name);
+    }
+
+    [Fact]
+    public void BuildMapper_Should_Not_Force_Validation_For_Unvalidated_Config()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.RequireExplicitMaps = true;
+            cfg.CreateMap<OuterSource, OuterDestination>();
+        });
+
+        var mapper = config.BuildMapper(warmUp: false);
+
+        Assert.NotNull(mapper);
+    }
+
+    [Fact]
+    public void AddOttoMapper_Should_Register_Profile_From_Marker_Type()
+    {
+        var services = new ServiceCollection();
+        services.AddOttoMapper(typeof(TestProfile));
+
+        using var provider = services.BuildServiceProvider();
+        var mapper = provider.GetRequiredService<IMapper>();
+        var result = mapper.Map<ProfileSource, ProfileDestination>(new ProfileSource { Name = "marker" });
+
+        Assert.Equal("marker", result.Name);
     }
 
     private sealed class TestProfile : Profile
@@ -179,6 +304,16 @@ public class CompatibilityTests
     }
 
     private sealed class ReverseDestination
+    {
+        public string? Name { get; set; }
+    }
+
+    private sealed class ReverseMemberSource
+    {
+        public string? DisplayName { get; set; }
+    }
+
+    private sealed class ReverseMemberDestination
     {
         public string? Name { get; set; }
     }
@@ -216,6 +351,31 @@ public class CompatibilityTests
 
     private sealed class ProfileDestination
     {
+        public string? Name { get; set; }
+    }
+
+    private sealed class EnumSource
+    {
+        public PreisTyp Status { get; set; }
+    }
+
+    private sealed class EnumDestination
+    {
+        public int Status { get; set; }
+    }
+
+    private enum PreisTyp
+    {
+        Basic = 1,
+        Premium = 2
+    }
+
+    private sealed class DestinationWithoutPublicCtor
+    {
+        private DestinationWithoutPublicCtor()
+        {
+        }
+
         public string? Name { get; set; }
     }
 }

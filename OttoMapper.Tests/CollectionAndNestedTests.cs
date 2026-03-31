@@ -55,6 +55,34 @@ public class CollectionAndNestedTests
         Assert.Empty(result.PreviousAddresses!);
     }
 
+    [Fact]
+    public void Map_Should_Update_Existing_Destination_Collection()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<AddressSource, AddressDestination>();
+        });
+
+        var mapper = config.CreateMapper();
+        var destination = new List<AddressDestination>
+        {
+            new AddressDestination { City = "Old" }
+        };
+
+        var result = mapper.Map(
+            new List<AddressSource>
+            {
+                new AddressSource { City = "Berlin" },
+                new AddressSource { City = "Hamburg" }
+            },
+            destination);
+
+        Assert.Same(destination, result);
+        Assert.Equal(2, destination.Count);
+        Assert.Equal("Berlin", destination[0].City);
+        Assert.Equal("Hamburg", destination[1].City);
+    }
+
     private sealed class OrderSource
     {
         public AddressSource? Address { get; set; }

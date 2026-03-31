@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq.Expressions;
 
 namespace OttoMapper.Mapping
@@ -25,18 +26,13 @@ namespace OttoMapper.Mapping
         /// </summary>
         public IMappingExpression<TSource, TDestination> ForMember<TMember>(Expression<Func<TDestination, TMember>> destinationMember, Func<TSource, TMember> resolver)
         {
-            if (destinationMember.Body is MemberExpression mexp)
+            if (resolver == null)
             {
-                var name = mexp.Member.Name;
-                Func<object, object> boxed = src => resolver((TSource)src)!;
-                _typeMap.MemberResolvers[name] = boxed;
-                _typeMap.TypedMemberResolvers[name] = (typeof(TSource), typeof(TMember), resolver);
-            }
-            else
-            {
-                throw new ArgumentException("Destination member must be a property access", nameof(destinationMember));
+                throw new ArgumentNullException(nameof(resolver));
             }
 
+            Expression<Func<TSource, TMember>> resolverExpression = source => resolver(source);
+            ApplyMemberMap(destinationMember, resolverExpression);
             return this;
         }
 
@@ -131,8 +127,94 @@ namespace OttoMapper.Mapping
         /// </summary>
         public IMappingExpression<TDestination, TSource> ReverseMap()
         {
-            return _configuration.CreateMapExpression<TDestination, TSource>();
+            var reverseExpression = _configuration.CreateMapExpression<TDestination, TSource>();
+            if (!(reverseExpression is MappingExpression<TDestination, TSource> reverseConcreteExpression))
+            {
+                return reverseExpression;
+            }
+
+            foreach (var ignoredMember in _typeMap.IgnoredMembers)
+            {
+                if (_typeMap.SourceType.GetProperty(ignoredMember) != null)
+                {
+                    reverseExpression.ForMember(BuildPropertyLambda<TSource>(ignoredMember), opt => opt.Ignore());
+                }
+            }
+
+            foreach (var reversePath in _typeMap.ReverseSourcePaths)
+            {
+                var sourceMember = _typeMap.SourceType.GetProperty(reversePath.Value);
+                var destinationMember = _typeMap.DestinationType.GetProperty(reversePath.Key);
+                if (sourceMember == null || destinationMember == null || sourceMember.PropertyType != destinationMember.PropertyType)
+                {
+                    continue;
+                }
+
+                CloneSimpleReverseMember(sourceMember, destinationMember);
+            }
+
+            return reverseExpression;
         }
+
+        private void ApplyMemberMap<TMember>(Expression<Func<TDestination, TMember>> destinationMember, Expression<Func<TSource, TMember>> resolver)
+        {
+            if (!(destinationMember.Body is MemberExpression mexp))
+            {
+                throw new ArgumentException("Destination member must be a property access", nameof(destinationMember));
+            }
+
+            if (resolver == null)
+            {
+                throw new ArgumentNullException(nameof(resolver));
+            }
+
+            var name = mexp.Member.Name;
+            var compiledResolver = resolver.Compile();
+            Func<object, object> boxed = src => compiledResolver((TSource)src)!;
+            _typeMap.MemberResolvers[name] = boxed;
+            _typeMap.TypedMemberResolvers[name] = (typeof(TSource), typeof(TMember), compiledResolver);
+
+            var sourcePath = MappingExpressionUtilities.GetSourcePath(resolver);
+            if (!string.IsNullOrEmpty(sourcePath))
+            {
+                _typeMap.ReverseSourcePaths[name] = sourcePath;
+            }
+        }
+
+        private void CloneSimpleReverseMember(System.Reflection.PropertyInfo sourceMember, System.Reflection.PropertyInfo destinationMember)
+        {
+            var method = typeof(MappingExpression<TSource, TDestination>).GetMethod(nameof(ApplyReverseMember), System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+                .MakeGenericMethod(typeof(TDestination), typeof(TSource), sourceMember.PropertyType);
+            method.Invoke(null, new object[] { _configuration, sourceMember.Name, destinationMember.Name });
+        }
+
+        private static void ApplyReverseMember<TReverseSource, TReverseDestination, TMember>(MapperConfiguration configuration, string reverseDestinationMemberName, string reverseSourceMemberName)
+        {
+            var reverseExpression = configuration.CreateMapExpression<TReverseSource, TReverseDestination>();
+            if (!(reverseExpression is MappingExpression<TReverseSource, TReverseDestination> reverseConcreteExpression))
+            {
+                return;
+            }
+
+            var destinationLambda = BuildPropertyLambda<TReverseDestination, TMember>(reverseDestinationMemberName);
+            var sourceLambda = BuildPropertyLambda<TReverseSource, TMember>(reverseSourceMemberName);
+            reverseConcreteExpression.ApplyMemberMap(destinationLambda, sourceLambda);
+        }
+
+        private static Expression<Func<T, TMember>> BuildPropertyLambda<T, TMember>(string memberName)
+        {
+            var parameter = Expression.Parameter(typeof(T), "x");
+            var body = Expression.Property(parameter, memberName);
+            return Expression.Lambda<Func<T, TMember>>(body, parameter);
+        }
+
+        private static Expression<Func<T, object>> BuildPropertyLambda<T>(string memberName)
+        {
+            var parameter = Expression.Parameter(typeof(T), "x");
+            var body = Expression.Convert(Expression.Property(parameter, memberName), typeof(object));
+            return Expression.Lambda<Func<T, object>>(body, parameter);
+        }
+
     }
 
     internal class MemberOptions<TSource, TDestination, TMember> : IMemberOptions<TSource, TDestination, TMember>
@@ -146,17 +228,23 @@ namespace OttoMapper.Mapping
             _memberName = memberName;
         }
 
-        public void MapFrom(Func<TSource, TMember> resolver)
+        public void MapFrom(Expression<Func<TSource, TMember>> resolver)
         {
             if (resolver == null)
             {
                 throw new ArgumentNullException(nameof(resolver));
             }
 
-            Func<object, object> boxed = src => resolver((TSource)src)!;
+            var compiledResolver = resolver.Compile();
+            Func<object, object> boxed = src => compiledResolver((TSource)src)!;
             _typeMap.MemberResolvers[_memberName] = boxed;
-            _typeMap.TypedMemberResolvers[_memberName] = (typeof(TSource), typeof(TMember), resolver);
+            _typeMap.TypedMemberResolvers[_memberName] = (typeof(TSource), typeof(TMember), compiledResolver);
             _typeMap.IgnoredMembers.Remove(_memberName);
+            var sourcePath = MappingExpressionUtilities.GetSourcePath(resolver);
+            if (!string.IsNullOrEmpty(sourcePath))
+            {
+                _typeMap.ReverseSourcePaths[_memberName] = sourcePath;
+            }
         }
 
         public void Condition(Func<TSource, bool> condition)
@@ -205,14 +293,15 @@ namespace OttoMapper.Mapping
             }
         }
 
-        public void MapFrom(Func<TSource, TMember> resolver)
+        public void MapFrom(Expression<Func<TSource, TMember>> resolver)
         {
             if (resolver == null)
             {
                 throw new ArgumentNullException(nameof(resolver));
             }
 
-            _pathMap.Resolver = src => resolver((TSource)src)!;
+            var compiledResolver = resolver.Compile();
+            _pathMap.Resolver = src => compiledResolver((TSource)src)!;
             _pathMap.Ignore = false;
         }
 
@@ -244,6 +333,28 @@ namespace OttoMapper.Mapping
         public void NullSubstitute(TMember value)
         {
             _pathMap.NullSubstitute = value;
+        }
+    }
+
+    internal static class MappingExpressionUtilities
+    {
+        public static string GetSourcePath<TSource, TMember>(Expression<Func<TSource, TMember>> resolver)
+        {
+            var segments = new Stack<string>();
+            Expression? current = resolver.Body;
+
+            while (current is MemberExpression memberExpression)
+            {
+                segments.Push(memberExpression.Member.Name);
+                current = memberExpression.Expression;
+            }
+
+            if (current is ParameterExpression && segments.Count > 0)
+            {
+                return string.Join(".", segments.ToArray());
+            }
+
+            return string.Empty;
         }
     }
 }

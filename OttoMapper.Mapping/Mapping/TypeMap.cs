@@ -55,6 +55,11 @@ namespace OttoMapper.Mapping
         public HashSet<string> IgnoredMembers { get; } = new HashSet<string>();
 
         /// <summary>
+        /// Gets reversible source member paths keyed by destination member name.
+        /// </summary>
+        public Dictionary<string, string> ReverseSourcePaths { get; } = new Dictionary<string, string>();
+
+        /// <summary>
         /// Gets configured path mappings.
         /// </summary>
         public List<PathMap> PathMaps { get; } = new List<PathMap>();

@@ -20,6 +20,36 @@ namespace OttoMapper.Mapping
         TDestination Map<TSource, TDestination>(TSource source);
 
         /// <summary>
+        /// Maps a source instance into an existing destination instance.
+        /// </summary>
+        /// <typeparam name="TSource">The source type.</typeparam>
+        /// <typeparam name="TDestination">The destination type.</typeparam>
+        /// <param name="source">The source instance.</param>
+        /// <param name="destination">The destination instance to update.</param>
+        /// <returns>The updated destination instance.</returns>
+        [return: MaybeNull]
+        TDestination Map<TSource, TDestination>(TSource source, TDestination destination);
+
+        /// <summary>
+        /// Maps a source instance into an existing destination instance known only at runtime.
+        /// </summary>
+        /// <typeparam name="TSource">The source type.</typeparam>
+        /// <param name="source">The source instance.</param>
+        /// <param name="destination">The destination instance to update.</param>
+        /// <returns>The updated destination instance.</returns>
+        [return: MaybeNull]
+        object Map<TSource>(TSource source, object destination);
+
+        /// <summary>
+        /// Maps an object instance into an existing destination instance.
+        /// </summary>
+        /// <param name="source">The source instance.</param>
+        /// <param name="destination">The destination instance to update.</param>
+        /// <returns>The updated destination instance.</returns>
+        [return: MaybeNull]
+        object Map(object source, object destination);
+
+        /// <summary>
         /// Maps an object instance to the specified destination type.
         /// </summary>
         /// <typeparam name="TDestination">The destination type.</typeparam>
@@ -64,6 +94,12 @@ namespace OttoMapper.Mapping
         /// <param name="warmUp">When set to <c>true</c>, precompiles known maps during construction.</param>
         /// <returns>A configured mapper instance.</returns>
         IMapper BuildMapper(bool warmUp = true);
+
+        /// <summary>
+        /// Creates a mapper instance from the current configuration.
+        /// </summary>
+        /// <returns>A configured mapper instance.</returns>
+        IMapper CreateMapper();
     }
 
     /// <summary>
@@ -120,7 +156,7 @@ namespace OttoMapper.Mapping
         /// <summary>
         /// Maps the destination member from a custom resolver.
         /// </summary>
-        void MapFrom(Func<TSource, TMember> resolver);
+        void MapFrom(Expression<Func<TSource, TMember>> resolver);
 
         /// <summary>
         /// Applies the member assignment only when the source condition is satisfied.

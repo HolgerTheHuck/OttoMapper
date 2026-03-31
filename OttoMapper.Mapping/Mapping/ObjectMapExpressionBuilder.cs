@@ -127,7 +127,7 @@ namespace OttoMapper.Mapping
                 return Expression.Assign(destVar, Expression.Convert(invoked, destinationType));
             }
 
-            return Expression.Assign(destVar, CreateNewExpression(destinationType));
+            return Expression.Assign(destVar, CreateObjectFactoryExpression(destinationType));
         }
 
         private Expression? CreateMemberValueExpression(TypeMap? typeMap, Type sourceType, Type destinationType, ParameterExpression srcParamTyped, ParameterExpression destVar, PropertyInfo destProp)
@@ -138,14 +138,14 @@ namespace OttoMapper.Mapping
             {
                 var delConst = Expression.Constant(typedResolver.resolver, typedResolver.resolver.GetType());
                 var invoke = Expression.Invoke(delConst, srcParamTyped);
-                return Expression.Convert(invoke, destProp.PropertyType);
+                return CreateCompatibleValueExpression(invoke, destProp.PropertyType);
             }
 
             if (typeMap != null && typeMap.MemberResolvers.TryGetValue(destProp.Name, out var resolver))
             {
                 var resolverConst = Expression.Constant(resolver, typeof(Func<object, object>));
                 var invoke = Expression.Invoke(resolverConst, Expression.Convert(srcParamTyped, typeof(object)));
-                return Expression.Convert(invoke, destProp.PropertyType);
+                return CreateCompatibleValueExpression(invoke, destProp.PropertyType);
             }
 
             if (srcProp == null || !srcProp.CanRead)
@@ -163,6 +163,11 @@ namespace OttoMapper.Mapping
                 if (srcProp.PropertyType == destProp.PropertyType)
                 {
                     return Expression.Property(srcParamTyped, srcProp);
+                }
+
+                if (MappingHelpers.CanConvertSimpleType(srcProp.PropertyType, destProp.PropertyType))
+                {
+                    return CreateCompatibleValueExpression(Expression.Property(srcParamTyped, srcProp), destProp.PropertyType);
                 }
 
                 _prepareMap(srcProp.PropertyType, destProp.PropertyType);
@@ -212,6 +217,11 @@ namespace OttoMapper.Mapping
             var srcElem = MappingHelpers.GetEnumerableElementType(srcProp.PropertyType) ?? typeof(object);
             var dstElem = MappingHelpers.GetEnumerableElementType(destProp.PropertyType) ?? typeof(object);
 
+            if (srcElem == dstElem)
+            {
+                return Expression.Property(srcParamTyped, srcProp);
+            }
+
             if (_typedCache.TryGet(srcElem, dstElem, out var typedElem))
             {
                 var srcAccess = Expression.Property(srcParamTyped, srcProp);
@@ -225,7 +235,7 @@ namespace OttoMapper.Mapping
                 {
                     var mapToArrayMethod = ReflectionHelpers.GetRequiredMethod(typeof(MappingHelpers), "MapToArrayGeneric", BindingFlags.Static | BindingFlags.Public).MakeGenericMethod(srcElem, dstElem);
                     collectionExpr = Expression.Call(mapToArrayMethod, srcConverted, typedConst);
-                    return Expression.Convert(collectionExpr, destProp.PropertyType);
+                            return CreateCompatibleValueExpression(collectionExpr, destProp.PropertyType);
                 }
 
                 var listType = typeof(List<>).MakeGenericType(dstElem);
@@ -285,7 +295,7 @@ namespace OttoMapper.Mapping
             }
             else
             {
-                assignDestObj = Expression.Assign(destVarObj, CreateNewExpression(destinationType));
+                assignDestObj = Expression.Assign(destVarObj, CreateObjectFactoryExpression(destinationType));
             }
 
             var blockExprsObj = new List<Expression> { assignDestObj };
@@ -308,7 +318,7 @@ namespace OttoMapper.Mapping
                 {
                     var resolverConst = Expression.Constant(resolver, typeof(Func<object, object>));
                     var invoke = Expression.Invoke(resolverConst, sourceParamObj);
-                    valueExprObj = Expression.Convert(invoke, destProp.PropertyType);
+                    valueExprObj = CreateCompatibleValueExpression(invoke, destProp.PropertyType);
                 }
                 else if (srcProp != null && srcProp.CanRead)
                 {
@@ -328,6 +338,11 @@ namespace OttoMapper.Mapping
                         {
                             var srcAccess = Expression.Property(Expression.Convert(sourceParamObj, sourceType), srcProp);
                             valueExprObj = srcAccess;
+                        }
+                        else if (MappingHelpers.CanConvertSimpleType(srcProp.PropertyType, destProp.PropertyType))
+                        {
+                            var srcAccess = Expression.Property(Expression.Convert(sourceParamObj, sourceType), srcProp);
+                            valueExprObj = CreateCompatibleValueExpression(srcAccess, destProp.PropertyType);
                         }
                         else
                         {
@@ -401,15 +416,28 @@ namespace OttoMapper.Mapping
             return Expression.Convert(bodyObj, typeof(object));
         }
 
-        private static NewExpression CreateNewExpression(Type type)
+        private static Expression CreateObjectFactoryExpression(Type type)
         {
-            var ctor = type.GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
-            if (ctor == null)
+            var createMethod = ReflectionHelpers.GetRequiredMethod(typeof(MappingHelpers), nameof(MappingHelpers.CreateObjectInstance), BindingFlags.Static | BindingFlags.Public);
+            var createCall = Expression.Call(createMethod, Expression.Constant(type));
+            return Expression.Convert(createCall, type);
+        }
+
+        private static Expression CreateCompatibleValueExpression(Expression sourceExpression, Type destinationType)
+        {
+            if (sourceExpression.Type == destinationType)
             {
-                throw new InvalidOperationException($"Destination type '{type.FullName}' has no public parameterless constructor. Use ConstructUsing() to provide a custom constructor.");
+                return sourceExpression;
             }
 
-            return Expression.New(ctor);
+            if (MappingHelpers.CanConvertSimpleType(sourceExpression.Type, destinationType))
+            {
+                var convertMethod = ReflectionHelpers.GetRequiredMethod(typeof(MappingHelpers), nameof(MappingHelpers.ConvertSimpleValue), BindingFlags.Static | BindingFlags.Public);
+                var converted = Expression.Call(convertMethod, Expression.Convert(sourceExpression, typeof(object)), Expression.Constant(destinationType));
+                return Expression.Convert(converted, destinationType);
+            }
+
+            return Expression.Convert(sourceExpression, destinationType);
         }
     }
 }
