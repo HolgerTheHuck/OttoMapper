@@ -26,6 +26,8 @@ Otto is a quintessentially German name — and so is the author. OttoMapper is a
 - `ReverseMap()`
 - `ForPath(...)`
 - `BeforeMap(...)` and `AfterMap(...)`
+- `ConvertUsing(...)`
+- `ConstructUsing(...)`
 - `Map<TDestination>(object source)`
 
 ## Basic usage
@@ -70,7 +72,7 @@ builder.Services.AddOttoMapper(cfg =>
 
 ## Notes
 
-OttoMapper is **not** a drop-in replacement for AutoMapper. It covers the mapping scenarios you typically encounter in Web APIs and DTO layers — `CreateMap`, profiles, `ForMember`/`ForPath`, conditions, reverse maps, hooks, nested and collection mapping — but it deliberately does not aim for full feature parity. If your project uses only the common subset of AutoMapper's API, OttoMapper can be a lightweight, performance-focused alternative.
+OttoMapper is **not** a drop-in replacement for AutoMapper. It targets API compatibility with **AutoMapper 14** for the most common mapping scenarios — `CreateMap`, profiles, `ForMember`/`ForPath`, conditions, reverse maps, hooks, nested and collection mapping — but it deliberately does not aim for full feature parity. If your project uses only the common subset of AutoMapper 14's API, migrating to OttoMapper should require minimal effort.
 
 ## License
 
