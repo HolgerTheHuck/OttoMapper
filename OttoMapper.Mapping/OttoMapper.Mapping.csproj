@@ -5,8 +5,8 @@
     <IsPackable>true</IsPackable>
     <PackageId>OttoMapper.Mapping</PackageId>
     <Description>Fast object mapper with AutoMapper-like configuration, explicit map validation, nested mapping, collection mapping, and performance-focused runtime delegates.</Description>
-    <PackageReleaseNotes>First stable release. AutoMapper-like profiles, explicit map validation, nested and collection mapping, ForMember/ForPath/Condition/NullSubstitute/ReverseMap, BeforeMap/AfterMap hooks, configuration freeze after BuildMapper, and thread-safe compiled delegates.</PackageReleaseNotes>
-    <Version>1.0.2-preview.2</Version>
+    <PackageReleaseNotes>Added case-insensitive property mapping (default on) and underscore-ignoring property name matching (e.g. EMails_ID → EmailsId, default on). Compatible with AutoMapper 14 naming conventions.</PackageReleaseNotes>
+    <Version>1.0.2</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>

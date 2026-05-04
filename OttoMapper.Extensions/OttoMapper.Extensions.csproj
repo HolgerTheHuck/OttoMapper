@@ -6,8 +6,8 @@
     <IsPackable>true</IsPackable>
     <PackageId>OttoMapper.Extensions</PackageId>
     <Description>Dependency injection and ASP.NET Core integration package for OttoMapper with assembly scanning for profiles.</Description>
-    <PackageReleaseNotes>First stable release. AddOttoMapper overloads for IServiceCollection with configuration callbacks, profile assembly scanning, and pre-built configuration instances.</PackageReleaseNotes>
-    <Version>1.0.2-preview.2</Version>
+    <PackageReleaseNotes>Updated dependency to OttoMapper.Mapping 1.0.2 with case-insensitive and underscore-ignoring property mapping support.</PackageReleaseNotes>
+    <Version>1.0.2</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>

@@ -135,7 +135,7 @@ namespace OttoMapper.Mapping
 
             foreach (var ignoredMember in _typeMap.IgnoredMembers)
             {
-                if (MappingHelpers.GetPropertyCaseInsensitive(_typeMap.SourceType, ignoredMember, _typeMap.CaseInsensitiveMapping) != null)
+                if (MappingHelpers.GetPropertyCaseInsensitive(_typeMap.SourceType, ignoredMember, _typeMap.CaseInsensitiveMapping, _typeMap.IgnoreUnderscoresInPropertyNames) != null)
                 {
                     reverseExpression.ForMember(BuildPropertyLambda<TSource>(ignoredMember), opt => opt.Ignore());
                 }
@@ -143,8 +143,8 @@ namespace OttoMapper.Mapping
 
             foreach (var reversePath in _typeMap.ReverseSourcePaths)
             {
-                var sourceMember = MappingHelpers.GetPropertyCaseInsensitive(_typeMap.SourceType, reversePath.Value, _typeMap.CaseInsensitiveMapping);
-                var destinationMember = MappingHelpers.GetPropertyCaseInsensitive(_typeMap.DestinationType, reversePath.Key, _typeMap.CaseInsensitiveMapping);
+                var sourceMember = MappingHelpers.GetPropertyCaseInsensitive(_typeMap.SourceType, reversePath.Value, _typeMap.CaseInsensitiveMapping, _typeMap.IgnoreUnderscoresInPropertyNames);
+                var destinationMember = MappingHelpers.GetPropertyCaseInsensitive(_typeMap.DestinationType, reversePath.Key, _typeMap.CaseInsensitiveMapping, _typeMap.IgnoreUnderscoresInPropertyNames);
                 if (sourceMember == null || destinationMember == null || sourceMember.PropertyType != destinationMember.PropertyType)
                 {
                     continue;

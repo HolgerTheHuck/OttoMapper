@@ -24,6 +24,12 @@ namespace OttoMapper.Mapping
         public bool CaseInsensitiveMapping { get; set; } = true;
 
         /// <summary>
+        /// Gets or sets a value indicating whether underscores in property names are ignored during matching.
+        /// Defaults to <c>true</c>.
+        /// </summary>
+        public bool IgnoreUnderscoresInPropertyNames { get; set; } = true;
+
+        /// <summary>
         /// Initializes a new empty mapper configuration.
         /// </summary>
         public MapperConfiguration()
@@ -152,7 +158,7 @@ namespace OttoMapper.Mapping
                         continue;
                     }
 
-                    var sourceProperty = MappingHelpers.GetPropertyCaseInsensitive(typeMap.SourceType, destinationProperty.Name, typeMap.CaseInsensitiveMapping, BindingFlags.Public | BindingFlags.Instance);
+                    var sourceProperty = MappingHelpers.GetPropertyCaseInsensitive(typeMap.SourceType, destinationProperty.Name, typeMap.CaseInsensitiveMapping, typeMap.IgnoreUnderscoresInPropertyNames, BindingFlags.Public | BindingFlags.Instance);
                     if (sourceProperty == null || !sourceProperty.CanRead)
                     {
                         errors.Add($"Missing source member for '{typeMap.SourceType.Name}.{destinationProperty.Name}' -> '{typeMap.DestinationType.Name}.{destinationProperty.Name}'.");
@@ -213,7 +219,8 @@ namespace OttoMapper.Mapping
             {
                 typeMap = new TypeMap(typeof(TSource), typeof(TDestination))
                 {
-                    CaseInsensitiveMapping = this.CaseInsensitiveMapping
+                    CaseInsensitiveMapping = this.CaseInsensitiveMapping,
+                    IgnoreUnderscoresInPropertyNames = this.IgnoreUnderscoresInPropertyNames
                 };
                 TypeMaps.Add(typeMap);
             }

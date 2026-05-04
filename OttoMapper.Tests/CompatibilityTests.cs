@@ -512,6 +512,36 @@ public class CompatibilityTests
         Assert.Null(result.Email);
     }
 
+    [Fact]
+    public void Map_Should_Support_Underscore_Property_Names()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<UnderscoreSource, UnderscoreDestination>();
+        });
+
+        var mapper = config.CreateMapper();
+        var result = mapper.Map<UnderscoreSource, UnderscoreDestination>(new UnderscoreSource { EMails_ID = 42, User_Name = "otto" });
+
+        Assert.Equal(42, result.EmailsId);
+        Assert.Equal("otto", result.UserName);
+    }
+
+    [Fact]
+    public void Map_Should_Support_Underscore_ReverseMap()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<UnderscoreSource, UnderscoreDestination>().ReverseMap();
+        });
+
+        var mapper = config.CreateMapper();
+        var result = mapper.Map<UnderscoreDestination, UnderscoreSource>(new UnderscoreDestination { EmailsId = 99, UserName = "mapper" });
+
+        Assert.Equal(99, result.EMails_ID);
+        Assert.Equal("mapper", result.User_Name);
+    }
+
     private sealed class CaseInsensitiveSource
     {
         public int ID { get; set; }
@@ -522,5 +552,17 @@ public class CompatibilityTests
     {
         public int Id { get; set; }
         public string? Email { get; set; }
+    }
+
+    private sealed class UnderscoreSource
+    {
+        public int EMails_ID { get; set; }
+        public string? User_Name { get; set; }
+    }
+
+    private sealed class UnderscoreDestination
+    {
+        public int EmailsId { get; set; }
+        public string? UserName { get; set; }
     }
 }

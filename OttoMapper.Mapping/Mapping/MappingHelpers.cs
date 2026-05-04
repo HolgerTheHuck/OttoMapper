@@ -14,7 +14,7 @@ namespace OttoMapper.Mapping
             return typeof(IEnumerable).IsAssignableFrom(type);
         }
 
-        public static PropertyInfo? GetPropertyCaseInsensitive(Type type, string name, bool caseInsensitive, BindingFlags bindingFlags = BindingFlags.Public | BindingFlags.Instance)
+        public static PropertyInfo? GetPropertyCaseInsensitive(Type type, string name, bool caseInsensitive, bool ignoreUnderscores = true, BindingFlags bindingFlags = BindingFlags.Public | BindingFlags.Instance)
         {
             var property = type.GetProperty(name, bindingFlags);
             if (property != null)
@@ -24,8 +24,26 @@ namespace OttoMapper.Mapping
 
             if (caseInsensitive)
             {
-                return type.GetProperties(bindingFlags).FirstOrDefault(p =>
+                property = type.GetProperties(bindingFlags).FirstOrDefault(p =>
                     p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                if (property != null)
+                {
+                    return property;
+                }
+            }
+
+            if (ignoreUnderscores)
+            {
+                var normalizedName = name.Replace("_", "");
+                property = type.GetProperties(bindingFlags).FirstOrDefault(p =>
+                {
+                    var normalizedPropName = p.Name.Replace("_", "");
+                    return normalizedPropName.Equals(normalizedName, caseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+                });
+                if (property != null)
+                {
+                    return property;
+                }
             }
 
             return null;
@@ -386,19 +404,19 @@ namespace OttoMapper.Mapping
 
                 if (value != null)
                 {
-                    SetPathValue(destination, pathMap.Path, value);
+                    SetPathValue(destination, pathMap.Path, value, typeMap.CaseInsensitiveMapping, typeMap.IgnoreUnderscoresInPropertyNames);
                 }
             }
         }
 
-        private static void SetPathValue(object destination, string path, object value, bool caseInsensitive = true)
+        private static void SetPathValue(object destination, string path, object value, bool caseInsensitive = true, bool ignoreUnderscores = true)
         {
             var segments = path.Split('.');
             object current = destination;
 
             for (int i = 0; i < segments.Length - 1; i++)
             {
-                var property = GetPropertyCaseInsensitive(current.GetType(), segments[i], caseInsensitive);
+                var property = GetPropertyCaseInsensitive(current.GetType(), segments[i], caseInsensitive, ignoreUnderscores);
                 if (property == null || !property.CanRead)
                 {
                     return;
@@ -420,7 +438,7 @@ namespace OttoMapper.Mapping
                 current = nested;
             }
 
-            var leaf = GetPropertyCaseInsensitive(current.GetType(), segments[segments.Length - 1], caseInsensitive);
+            var leaf = GetPropertyCaseInsensitive(current.GetType(), segments[segments.Length - 1], caseInsensitive, ignoreUnderscores);
             if (leaf == null || !leaf.CanWrite)
             {
                 return;

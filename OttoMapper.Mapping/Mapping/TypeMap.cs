@@ -35,6 +35,11 @@ namespace OttoMapper.Mapping
         public bool CaseInsensitiveMapping { get; set; } = true;
 
         /// <summary>
+        /// Gets or sets a value indicating whether underscores in property names are ignored during matching.
+        /// </summary>
+        public bool IgnoreUnderscoresInPropertyNames { get; set; } = true;
+
+        /// <summary>
         /// Gets object-based member resolvers keyed by destination member name.
         /// </summary>
         public Dictionary<string, Func<object, object>> MemberResolvers { get; } = new Dictionary<string, Func<object, object>>();
