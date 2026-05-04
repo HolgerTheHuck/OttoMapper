@@ -14,6 +14,23 @@ namespace OttoMapper.Mapping
             return typeof(IEnumerable).IsAssignableFrom(type);
         }
 
+        public static PropertyInfo? GetPropertyCaseInsensitive(Type type, string name, bool caseInsensitive, BindingFlags bindingFlags = BindingFlags.Public | BindingFlags.Instance)
+        {
+            var property = type.GetProperty(name, bindingFlags);
+            if (property != null)
+            {
+                return property;
+            }
+
+            if (caseInsensitive)
+            {
+                return type.GetProperties(bindingFlags).FirstOrDefault(p =>
+                    p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return null;
+        }
+
         public static bool IsSimpleType(Type type)
         {
             var candidateType = Nullable.GetUnderlyingType(type) ?? type;
@@ -81,7 +98,9 @@ namespace OttoMapper.Mapping
         {
             if (value == null)
             {
-                return null;
+                return CanBeNull(destinationType)
+                    ? null
+                    : GetDefaultValue(Nullable.GetUnderlyingType(destinationType) ?? destinationType);
             }
 
             var destinationCandidate = Nullable.GetUnderlyingType(destinationType) ?? destinationType;
@@ -372,14 +391,14 @@ namespace OttoMapper.Mapping
             }
         }
 
-        private static void SetPathValue(object destination, string path, object value)
+        private static void SetPathValue(object destination, string path, object value, bool caseInsensitive = true)
         {
             var segments = path.Split('.');
             object current = destination;
 
             for (int i = 0; i < segments.Length - 1; i++)
             {
-                var property = current.GetType().GetProperty(segments[i]);
+                var property = GetPropertyCaseInsensitive(current.GetType(), segments[i], caseInsensitive);
                 if (property == null || !property.CanRead)
                 {
                     return;
@@ -401,7 +420,7 @@ namespace OttoMapper.Mapping
                 current = nested;
             }
 
-            var leaf = current.GetType().GetProperty(segments[segments.Length - 1]);
+            var leaf = GetPropertyCaseInsensitive(current.GetType(), segments[segments.Length - 1], caseInsensitive);
             if (leaf == null || !leaf.CanWrite)
             {
                 return;

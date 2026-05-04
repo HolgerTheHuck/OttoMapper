@@ -132,7 +132,7 @@ namespace OttoMapper.Mapping
 
         private Expression? CreateMemberValueExpression(TypeMap? typeMap, Type sourceType, Type destinationType, ParameterExpression srcParamTyped, ParameterExpression destVar, PropertyInfo destProp)
         {
-            var srcProp = sourceType.GetProperty(destProp.Name, BindingFlags.Public | BindingFlags.Instance);
+            var srcProp = MappingHelpers.GetPropertyCaseInsensitive(sourceType, destProp.Name, typeMap?.CaseInsensitiveMapping ?? true, BindingFlags.Public | BindingFlags.Instance);
 
             if (typeMap != null && typeMap.TypedMemberResolvers.TryGetValue(destProp.Name, out var typedResolver))
             {
@@ -311,7 +311,7 @@ namespace OttoMapper.Mapping
                 if (!destProp.CanWrite) continue;
                 if (typeMap != null && typeMap.IgnoredMembers.Contains(destProp.Name)) continue;
 
-                var srcProp = sourceType.GetProperty(destProp.Name, BindingFlags.Public | BindingFlags.Instance);
+                var srcProp = MappingHelpers.GetPropertyCaseInsensitive(sourceType, destProp.Name, typeMap?.CaseInsensitiveMapping ?? true, BindingFlags.Public | BindingFlags.Instance);
                 Expression? valueExprObj = null;
 
                 if (typeMap != null && typeMap.MemberResolvers.TryGetValue(destProp.Name, out var resolver))

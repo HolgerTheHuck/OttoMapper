@@ -18,6 +18,12 @@ namespace OttoMapper.Mapping
         public bool RequireExplicitMaps { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether property name matching is case-insensitive.
+        /// Defaults to <c>true</c>.
+        /// </summary>
+        public bool CaseInsensitiveMapping { get; set; } = true;
+
+        /// <summary>
         /// Initializes a new empty mapper configuration.
         /// </summary>
         public MapperConfiguration()
@@ -146,7 +152,7 @@ namespace OttoMapper.Mapping
                         continue;
                     }
 
-                    var sourceProperty = typeMap.SourceType.GetProperty(destinationProperty.Name, BindingFlags.Public | BindingFlags.Instance);
+                    var sourceProperty = MappingHelpers.GetPropertyCaseInsensitive(typeMap.SourceType, destinationProperty.Name, typeMap.CaseInsensitiveMapping, BindingFlags.Public | BindingFlags.Instance);
                     if (sourceProperty == null || !sourceProperty.CanRead)
                     {
                         errors.Add($"Missing source member for '{typeMap.SourceType.Name}.{destinationProperty.Name}' -> '{typeMap.DestinationType.Name}.{destinationProperty.Name}'.");
@@ -205,7 +211,10 @@ namespace OttoMapper.Mapping
             var typeMap = GetTypeMap(typeof(TSource), typeof(TDestination));
             if (typeMap == null)
             {
-                typeMap = new TypeMap(typeof(TSource), typeof(TDestination));
+                typeMap = new TypeMap(typeof(TSource), typeof(TDestination))
+                {
+                    CaseInsensitiveMapping = this.CaseInsensitiveMapping
+                };
                 TypeMaps.Add(typeMap);
             }
 

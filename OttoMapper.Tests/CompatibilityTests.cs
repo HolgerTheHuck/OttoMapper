@@ -206,6 +206,62 @@ public class CompatibilityTests
     }
 
     [Fact]
+    public void Map_Should_Convert_Int_To_Nullable_Int()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<IntSource, NullableIntDestination>();
+        });
+
+        var mapper = config.CreateMapper();
+        var result = mapper.Map<IntSource, NullableIntDestination>(new IntSource { Value = 42 });
+
+        Assert.Equal(42, result.Value);
+    }
+
+    [Fact]
+    public void Map_Should_Convert_Nullable_Int_To_Int()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<NullableIntSource, IntDestination>();
+        });
+
+        var mapper = config.CreateMapper();
+        var result = mapper.Map<NullableIntSource, IntDestination>(new NullableIntSource { Value = 99 });
+
+        Assert.Equal(99, result.Value);
+    }
+
+    [Fact]
+    public void Map_Should_Convert_Long_To_Int()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<LongSource, IntDestination>();
+        });
+
+        var mapper = config.CreateMapper();
+        var result = mapper.Map<LongSource, IntDestination>(new LongSource { Value = 123 });
+
+        Assert.Equal(123, result.Value);
+    }
+
+    [Fact]
+    public void Map_Should_Convert_Int_To_Long()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<IntSource, LongDestination>();
+        });
+
+        var mapper = config.CreateMapper();
+        var result = mapper.Map<IntSource, LongDestination>(new IntSource { Value = 456 });
+
+        Assert.Equal(456L, result.Value);
+    }
+
+    [Fact]
     public void Map_Should_Create_Destination_Without_Public_Parameterless_Constructor()
     {
         var config = new MapperConfiguration(cfg =>
@@ -377,5 +433,94 @@ public class CompatibilityTests
         }
 
         public string? Name { get; set; }
+    }
+
+    private sealed class IntSource
+    {
+        public int Value { get; set; }
+    }
+
+    private sealed class NullableIntDestination
+    {
+        public int? Value { get; set; }
+    }
+
+    private sealed class NullableIntSource
+    {
+        public int? Value { get; set; }
+    }
+
+    private sealed class IntDestination
+    {
+        public int Value { get; set; }
+    }
+
+    private sealed class LongSource
+    {
+        public long Value { get; set; }
+    }
+
+    private sealed class LongDestination
+    {
+        public long Value { get; set; }
+    }
+
+    [Fact]
+    public void Map_Should_Support_Case_Insensitive_Property_Names()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<CaseInsensitiveSource, CaseInsensitiveDestination>();
+        });
+
+        var mapper = config.CreateMapper();
+        var result = mapper.Map<CaseInsensitiveSource, CaseInsensitiveDestination>(new CaseInsensitiveSource { ID = 42, EMail = "test@example.com" });
+
+        Assert.Equal(42, result.Id);
+        Assert.Equal("test@example.com", result.Email);
+    }
+
+    [Fact]
+    public void Map_Should_Support_Case_Insensitive_ReverseMap()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CreateMap<CaseInsensitiveSource, CaseInsensitiveDestination>().ReverseMap();
+        });
+
+        var mapper = config.CreateMapper();
+        var result = mapper.Map<CaseInsensitiveDestination, CaseInsensitiveSource>(new CaseInsensitiveDestination { Id = 99, Email = "reverse@example.com" });
+
+        Assert.Equal(99, result.ID);
+        Assert.Equal("reverse@example.com", result.EMail);
+    }
+
+    [Fact]
+    public void Map_Should_Support_Case_Sensitive_When_Disabled()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.CaseInsensitiveMapping = false;
+            cfg.CreateMap<CaseInsensitiveSource, CaseInsensitiveDestination>();
+        });
+
+        var mapper = config.CreateMapper();
+        var result = mapper.Map<CaseInsensitiveSource, CaseInsensitiveDestination>(new CaseInsensitiveSource { ID = 42, EMail = "test@example.com" });
+
+        // When case-sensitive, ID does not map to Id and EMail does not map to Email
+        Assert.Equal(0, result.Id);
+        Assert.Null(result.Email);
+    }
+
+    private sealed class CaseInsensitiveSource
+    {
+        public int ID { get; set; }
+        public string? EMail { get; set; }
+    }
+
+    private sealed class CaseInsensitiveDestination
+    {
+        public int Id { get; set; }
+        public string? Email { get; set; }
     }
 }

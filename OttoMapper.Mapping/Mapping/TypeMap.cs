@@ -30,6 +30,11 @@ namespace OttoMapper.Mapping
         public Type DestinationType { get; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether property name matching is case-insensitive.
+        /// </summary>
+        public bool CaseInsensitiveMapping { get; set; } = true;
+
+        /// <summary>
         /// Gets object-based member resolvers keyed by destination member name.
         /// </summary>
         public Dictionary<string, Func<object, object>> MemberResolvers { get; } = new Dictionary<string, Func<object, object>>();
