@@ -239,6 +239,9 @@ namespace OttoMapper.Mapping
             Func<object, object> boxed = src => compiledResolver((TSource)src)!;
             _typeMap.MemberResolvers[_memberName] = boxed;
             _typeMap.TypedMemberResolvers[_memberName] = (typeof(TSource), typeof(TMember), compiledResolver);
+            // Preserve the original expression so ProjectTo/BuildProjection can inline the resolver body
+            // into an EF-translatable projection. The runtime path ignores this entry.
+            _typeMap.MemberResolverExpressions[_memberName] = resolver;
             _typeMap.IgnoredMembers.Remove(_memberName);
             var sourcePath = MappingExpressionUtilities.GetSourcePath(resolver);
             if (!string.IsNullOrEmpty(sourcePath))

@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.1;net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>OttoMapper.Mapping</PackageId>
     <Description>Fast object mapper with AutoMapper-like configuration, explicit map validation, nested mapping, collection mapping, and performance-focused runtime delegates.</Description>
-    <PackageReleaseNotes>Added case-insensitive property mapping (default on) and underscore-ignoring property name matching (e.g. EMails_ID → EmailsId, default on). Compatible with AutoMapper 14 naming conventions.</PackageReleaseNotes>
-    <Version>1.0.2</Version>
+    <PackageReleaseNotes>Added IQueryable projection (ProjectTo / BuildProjection): translate configured maps into EF-translatable expressions so EF Core can project server-side. Additive and backwards compatible; behavior is unchanged unless ProjectTo/BuildProjection is used. MapFrom expression resolvers are now preserved for inlining into projections.</PackageReleaseNotes>
+    <Version>1.2.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>

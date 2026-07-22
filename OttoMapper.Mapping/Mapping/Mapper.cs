@@ -20,6 +20,9 @@ namespace OttoMapper.Mapping
         private readonly ThreadLocal<HashSet<(Type, Type)>> _mapsBeingBuilt = new ThreadLocal<HashSet<(Type, Type)>>(() => new HashSet<(Type, Type)>());
         private readonly CollectionMapFactory _collectionMapFactory;
         private readonly ObjectMapExpressionBuilder _objectMapExpressionBuilder;
+        private readonly ConcurrentDictionary<(Type, Type), LambdaExpression> _projections = new ConcurrentDictionary<(Type, Type), LambdaExpression>();
+        private readonly ThreadLocal<HashSet<(Type, Type)>> _projectionsBeingBuilt = new ThreadLocal<HashSet<(Type, Type)>>(() => new HashSet<(Type, Type)>());
+        private readonly ProjectionBuilder _projectionBuilder;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Mapper"/> class.
@@ -30,6 +33,7 @@ namespace OttoMapper.Mapping
             _config = config;
             _collectionMapFactory = new CollectionMapFactory(GetMapFunc, _typedCache);
             _objectMapExpressionBuilder = new ObjectMapExpressionBuilder(_typedCache, GetMapFunc, PrepareMap, RegisterTypedDelegate);
+            _projectionBuilder = new ProjectionBuilder(_config, BuildProjectionCore);
         }
 
         /// <summary>
@@ -43,6 +47,17 @@ namespace OttoMapper.Mapping
             if (_typedCache.TryGet<TSource, TDestination>(out var typed))
             {
                 return typed(source);
+            }
+
+            var generated = TryGetGeneratedMap<TSource, TDestination>();
+            if (generated != null)
+            {
+                // Seed both caches so subsequent typed, object-typed and nested runtime maps reuse the
+                // generated delegate instead of building an expression tree.
+                _typedCache.Set(generated);
+                var generatedKey = (typeof(TSource), typeof(TDestination));
+                _mapFuncs.GetOrAdd(generatedKey, _ => new Lazy<Func<object, object>>(() => o => (object)generated!((TSource)o!)!));
+                return generated(source);
             }
 
             var func = GetMapFunc(typeof(TSource), typeof(TDestination));
@@ -172,6 +187,106 @@ namespace OttoMapper.Mapping
             GetMapFunc(sourceType, destinationType);
         }
 
+        /// <summary>
+        /// Builds an <see cref="IQueryable"/>-translatable projection expression that maps
+        /// <typeparamref name="TSource"/> onto <typeparamref name="TDestination"/> server-side. See
+        /// <see cref="QueryableProjectionExtensions.ProjectTo"/> for usage. Throws <see cref="ProjectionException"/>
+        /// when the configured map uses customizations that cannot be translated to SQL.
+        /// </summary>
+        public Expression<Func<TSource, TDestination>> BuildProjection<TSource, TDestination>()
+        {
+            var lambda = BuildProjectionCore(typeof(TSource), typeof(TDestination));
+            if (lambda is Expression<Func<TSource, TDestination>> typed)
+            {
+                return typed;
+            }
+
+            // The core builder produces a LambdaExpression of the right Func<TSource,TDestination> type but the
+            // CLR may not recognize the exact generic type instance; rebuild as the typed expression.
+            return Expression.Lambda<Func<TSource, TDestination>>(lambda.Body, lambda.Parameters);
+        }
+
+        /// <summary>
+        /// Non-generic projection builder for runtime-known types. See
+        /// <see cref="QueryableProjectionExtensions.ProjectTo{TSource, TDestination}"/>.
+        /// </summary>
+        public LambdaExpression BuildProjection(Type sourceType, Type destinationType)
+            => BuildProjectionCore(sourceType, destinationType);
+
+        /// <summary>
+        /// Core (non-generic) projection builder with caching and cycle detection. Used by
+        /// <see cref="BuildProjection{TSource, TDestination}"/> and recursively by <see cref="ProjectionBuilder"/>
+        /// for nested/collection projections.
+        /// </summary>
+        internal LambdaExpression BuildProjectionCore(Type sourceType, Type destinationType)
+        {
+            var key = (sourceType, destinationType);
+            if (_projections.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            var beingBuilt = _projectionsBeingBuilt.Value!;
+            if (beingBuilt.Contains(key))
+            {
+                throw new ProjectionException(
+                    $"Circular projection detected for '{sourceType.FullName}' -> '{destinationType.FullName}'. Break the cycle (e.g. ignore the self-referencing member) to make the map projectable.");
+            }
+
+            beingBuilt.Add(key);
+            try
+            {
+                var lambda = _projectionBuilder.Build(sourceType, destinationType);
+                _projections[key] = lambda;
+                return lambda;
+            }
+            finally
+            {
+                beingBuilt.Remove(key);
+            }
+        }
+
+        // ---- Source-generated convention map precedence ----
+        // Generated maps are only eligible when the generator package is referenced (registry non-empty),
+        // the kill-switch is on, the global name-matching flags match the generator's compile-time defaults,
+        // and the runtime TypeMap (if any) carries no customizations. Without the generator package the
+        // registry is always empty, so every branch below is a no-op and behavior is identical to before.
+        private bool UseGeneratedMapFor(Type sourceType, Type destinationType)
+        {
+            if (!_config.UseGeneratedMaps)
+            {
+                return false;
+            }
+
+            if (!_config.CaseInsensitiveMapping || !_config.IgnoreUnderscoresInPropertyNames)
+            {
+                return false;
+            }
+
+            var typeMap = _config.GetTypeMap(sourceType, destinationType);
+            if (typeMap != null && typeMap.HasCustomizations)
+            {
+                return false;
+            }
+
+            if (typeMap != null && (!typeMap.CaseInsensitiveMapping || !typeMap.IgnoreUnderscoresInPropertyNames))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private Func<TSource, TDestination>? TryGetGeneratedMap<TSource, TDestination>()
+        {
+            if (!UseGeneratedMapFor(typeof(TSource), typeof(TDestination)))
+            {
+                return null;
+            }
+
+            return Generated.GeneratedMapRegistry.TryGet<TSource, TDestination>(out var generated) ? generated : null;
+        }
+
         private Func<object, object> GetMapFunc(Type sourceType, Type destinationType)
         {
             var key = (sourceType, destinationType);
@@ -179,6 +294,15 @@ namespace OttoMapper.Mapping
             if (mapsBeingBuilt.Contains(key))
             {
                 return CreateDeferredMapFunc(sourceType, destinationType);
+            }
+
+            // Belt-and-suspenders fast path for object-typed calls: use the generated wrapper when
+            // eligible, before falling back to the lazy runtime compilation.
+            if (UseGeneratedMapFor(sourceType, destinationType)
+                && Generated.GeneratedMapRegistry.TryGetObject(sourceType, destinationType, out var generatedObject)
+                && generatedObject != null)
+            {
+                return generatedObject;
             }
 
             return GetOrCreateMapFunc(sourceType, destinationType).Value;

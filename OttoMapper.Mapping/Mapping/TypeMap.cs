@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 
 namespace OttoMapper.Mapping
 {
@@ -100,6 +101,15 @@ namespace OttoMapper.Mapping
         public Dictionary<string, (Type srcType, Type memberType, Delegate resolver)> TypedMemberResolvers { get; } = new Dictionary<string, (Type, Type, Delegate)>();
 
         /// <summary>
+        /// Gets the original expression-based member resolvers (<c>MapFrom(Expression&lt;Func&lt;TSource, TMember&gt;&gt;)</c>),
+        /// keyed by destination member name. Populated only for genuine expression resolvers; absent for
+        /// the <c>Func</c>-based <c>ForMember</c> overload. The runtime expression-tree path ignores this
+        /// collection; it is consumed only by <c>ProjectTo</c>/<c>BuildProjection</c> to inline the resolver
+        /// body into an EF-translatable projection.
+        /// </summary>
+        public Dictionary<string, LambdaExpression> MemberResolverExpressions { get; } = new Dictionary<string, LambdaExpression>();
+
+        /// <summary>
         /// Gets or sets an optional typed converter for the entire map.
         /// </summary>
         public Delegate? TypedCustomConverter { get; set; }
@@ -108,5 +118,27 @@ namespace OttoMapper.Mapping
         /// Gets or sets an optional typed constructor for destination instances.
         /// </summary>
         public Delegate? TypedConstructUsing { get; set; }
+
+        /// <summary>
+        /// Gets a value indicating whether this map carries any runtime customizations (resolvers,
+        /// conditions, null substitutes, ignored members, path maps, hooks, converters, or custom
+        /// constructors). When <c>true</c>, the runtime expression-tree path must be used instead of a
+        /// source-generated convention map, because the generator cannot reproduce these customizations.
+        /// </summary>
+        internal bool HasCustomizations =>
+            MemberResolvers.Count > 0 ||
+            MemberConditions.Count > 0 ||
+            MemberConditionsWithDestination.Count > 0 ||
+            NullSubstitutes.Count > 0 ||
+            IgnoredMembers.Count > 0 ||
+            ReverseSourcePaths.Count > 0 ||
+            PathMaps.Count > 0 ||
+            BeforeMapActions.Count > 0 ||
+            AfterMapActions.Count > 0 ||
+            CustomConverter != null ||
+            ConstructUsing != null ||
+            TypedCustomConverter != null ||
+            TypedConstructUsing != null ||
+            TypedMemberResolvers.Count > 0;
     }
 }

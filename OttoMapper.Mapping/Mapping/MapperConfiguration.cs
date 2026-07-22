@@ -30,6 +30,16 @@ namespace OttoMapper.Mapping
         public bool IgnoreUnderscoresInPropertyNames { get; set; } = true;
 
         /// <summary>
+        /// Gets or sets a value indicating whether source-generated convention maps registered in
+        /// <see cref="Generated.GeneratedMapRegistry"/> should be preferred over the runtime
+        /// expression-tree path. Defaults to <c>true</c>. Set to <c>false</c> to force the runtime path
+        /// even when the source generator is referenced (e.g. for debugging or compatibility).
+        /// Generated maps are only used when the global <see cref="CaseInsensitiveMapping"/> and
+        /// <see cref="IgnoreUnderscoresInPropertyNames"/> flags match the generator's compile-time defaults.
+        /// </summary>
+        public bool UseGeneratedMaps { get; set; } = true;
+
+        /// <summary>
         /// Initializes a new empty mapper configuration.
         /// </summary>
         public MapperConfiguration()

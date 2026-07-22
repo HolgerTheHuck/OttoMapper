@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Diagnostics.CodeAnalysis;
 
@@ -67,6 +68,37 @@ namespace OttoMapper.Mapping
         /// <returns>The mapped destination instance.</returns>
         [return: MaybeNull]
         object Map(object source, Type sourceType, Type destinationType);
+
+        /// <summary>
+        /// Builds an <see cref="IQueryable"/>-translatable projection expression (e.g. for EF Core) that maps
+        /// <typeparamref name="TSource"/> onto <typeparamref name="TDestination"/> server-side. Throws
+        /// <see cref="ProjectionException"/> when the configured map uses customizations that cannot be
+        /// translated to SQL. Pass the result to <see cref="QueryableProjectionExtensions.ProjectTo"/>
+        /// (or <see cref="Queryable.Select{TSource, TDestination}"/>) to apply it to a query.
+        /// </summary>
+        /// <typeparam name="TSource">The source type.</typeparam>
+        /// <typeparam name="TDestination">The destination type.</typeparam>
+        /// <returns>A projection expression that LINQ providers can translate.</returns>
+        /// <remarks>
+        /// This is a default interface method that throws <see cref="NotSupportedException"/> unless overridden
+        /// by the implementing mapper (e.g. <see cref="Mapper"/>). Existing <see cref="IMapper"/> implementations
+        /// are therefore not broken by the addition of this member.
+        /// </remarks>
+        Expression<Func<TSource, TDestination>> BuildProjection<TSource, TDestination>()
+            => throw new NotSupportedException("BuildProjection is not implemented by this mapper.");
+
+        /// <summary>
+        /// Non-generic projection builder for runtime-known types. Returns an
+        /// <see cref="LambdaExpression"/> of type <c>Func&lt;sourceType, destinationType&gt;</c> that LINQ
+        /// providers (e.g. EF Core) can translate to SQL. Used by the single-argument
+        /// <see cref="QueryableProjectionExtensions.ProjectTo{TSource, TDestination}"/> convenience overload.
+        /// Throws <see cref="ProjectionException"/> when the configured map cannot be translated to SQL.
+        /// </summary>
+        /// <param name="sourceType">The runtime source type.</param>
+        /// <param name="destinationType">The runtime destination type.</param>
+        /// <returns>A projection lambda expression.</returns>
+        LambdaExpression BuildProjection(Type sourceType, Type destinationType)
+            => throw new NotSupportedException("BuildProjection is not implemented by this mapper.");
     }
 
     /// <summary>
