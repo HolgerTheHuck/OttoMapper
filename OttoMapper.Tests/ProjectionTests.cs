@@ -192,6 +192,83 @@ namespace OttoMapper.Tests
             Assert.Equal("b", dtos[1].Items![0]!.Name);
         }
 
+        // ---------------- ProjectionNullGuards switch (in-memory path) ----------------
+
+        [Fact]
+        public void Projection_GuardsEnabled_NullCollectionMapsToNull()
+        {
+            // Opt-in for LINQ-to-Objects projections over sources that carry null collections: with
+            // ProjectionNullGuards = true the guards return earlier and map to null instead of throwing.
+            var config = new MapperConfiguration(cfg =>
+            {
+                cfg.ProjectionNullGuards = true;
+                cfg.CreateMap<Item, ItemDto>();
+                cfg.CreateMap<Order, OrderDto>();
+            });
+            var mapper = config.BuildMapper();
+
+            var compiled = mapper.BuildProjection<Order, OrderDto>().Compile();
+            var projected = compiled(new Order { Id = 3, Items = null });
+
+            Assert.Null(projected.Items);
+        }
+
+        [Fact]
+        public void Projection_GuardsEnabled_NullCollectionElementMapsToNull()
+        {
+            var config = new MapperConfiguration(cfg =>
+            {
+                cfg.ProjectionNullGuards = true;
+                cfg.CreateMap<Item, ItemDto>();
+                cfg.CreateMap<Order, OrderDto>();
+            });
+            var mapper = config.BuildMapper();
+
+            var source = new List<Order>
+            {
+                new() { Id = 1, Items = new List<Item> { new() { Id = 10, Name = "a" }, null! } }
+            }.AsQueryable();
+
+            var projected = source.ProjectTo<OrderDto>(mapper).Single();
+            Assert.Equal(10, projected.Items![0].Id);
+            Assert.Null(projected.Items![1]);
+        }
+
+        [Fact]
+        public void Projection_GuardsDisabled_NoConditionsInExpression()
+        {
+            // Default: the collection projection expression contains no collection/element null guards (the
+            // ones that make EF Core materialize whole entities alongside the projection).
+            var config = new MapperConfiguration(cfg =>
+            {
+                cfg.CreateMap<Item, ItemDto>();
+                cfg.CreateMap<Order, OrderDto>();
+            });
+            var mapper = config.BuildMapper();
+
+            var source = new Order { Id = 1, Items = new List<Item> { new() { Id = 10, Name = "a" } } };
+            var compiled = mapper.BuildProjection<Order, OrderDto>().Compile();
+            Assert.Equal(10, compiled(source).Items![0].Id);
+            Assert.Equal(0, CountConditional(mapper.BuildProjection<Order, OrderDto>().Body));
+        }
+
+        private sealed class ConditionalCounter : ExpressionVisitor
+        {
+            public int Count;
+            public override Expression Visit(Expression? node)
+            {
+                if (node?.NodeType == ExpressionType.Conditional) Count++;
+                return base.Visit(node);
+            }
+        }
+
+        private static int CountConditional(Expression expression)
+        {
+            var counter = new ConditionalCounter();
+            counter.Visit(expression);
+            return counter.Count;
+        }
+
         // ---------------- Unprojectable -> ProjectionException ----------------
 
         [Fact]
@@ -392,7 +469,160 @@ namespace OttoMapper.Tests
             Assert.DoesNotContain("InternalCode", selectSql, StringComparison.OrdinalIgnoreCase);
         }
 
+        [Fact]
+        public void Projection_EfCore_CollectionProjection_ParityWithHandwrittenSql()
+        {
+            // Repro of the O1 overfetching report: nested collections (Story -> Nodes -> Options) must not
+            // emit null guards that make EF load the navigations a second time as whole entities.
+            using var connection = new SqliteConnection("DataSource=:memory:");
+            connection.Open();
+
+            var options = new DbContextOptionsBuilder<StoryDb>()
+                .UseSqlite(connection)
+                .LogTo(msg => _sqlLog.Add(msg), LogLevel.Information)
+                .Options;
+
+            using var db = new StoryDb(options);
+            db.Database.EnsureCreated();
+            db.Stories.Add(new StoryEntity
+            {
+                Id = 1,
+                Name = "S1",
+                Nodes = new List<StoryNodeEntity>
+                {
+                    new()
+                    {
+                        Id = 10, Title = "N1",
+                        Options = new List<QuizOptionEntity> { new() { Id = 100, Label = "A", IsCorrect = true } }
+                    },
+                    new()
+                    {
+                        Id = 20, Title = "N2",
+                        Options = new List<QuizOptionEntity>
+                        {
+                            new() { Id = 200, Label = "B", IsCorrect = false },
+                            new() { Id = 300, Label = "C", IsCorrect = false }
+                        }
+                    },
+                }
+            });
+            db.SaveChanges();
+
+            var config = new MapperConfiguration(cfg =>
+            {
+                cfg.CreateMap<StoryEntity, StoryDetailDto>();
+                cfg.CreateMap<StoryNodeEntity, StoryNodeDto>();
+                cfg.CreateMap<QuizOptionEntity, QuizOptionDto>();
+            });
+            var mapper = config.BuildMapper();
+
+            var dto = db.Stories.ProjectTo<StoryDetailDto>(mapper).Single();
+            Assert.Equal("S1", dto.Name);
+            Assert.Equal(2, dto.Nodes!.Count);
+            Assert.Equal("N1", dto.Nodes[0].Title);
+            Assert.Single(dto.Nodes[0].Options!);
+            Assert.Equal("A", dto.Nodes[0].Options[0].Label);
+            Assert.Equal(2, dto.Nodes[1].Options!.Count);
+
+            // SQL parity with a handwritten projection: run the handwritten query first, capture its SQL,
+            // then ProjectTo's SQL — both must select the same shape (2 joins, no IsCorrect column).
+            _sqlLog.Clear();
+            db.Stories.Select(s => new StoryDetailDto
+            {
+                Id = s.Id,
+                Name = s.Name,
+                Nodes = s.Nodes.Select(x => new StoryNodeDto
+                {
+                    Id = x.Id,
+                    Title = x.Title,
+                    Options = x.Options.Select(o => new QuizOptionDto { Id = o.Id, Label = o.Label }).ToList()
+                }).ToList()
+            }).Single();
+            var handwrittenSql = SelectsFromLog();
+
+            _sqlLog.Clear();
+            db.Stories.ProjectTo<StoryDetailDto>(mapper).Single();
+            var ottoSql = SelectsFromLog();
+
+            Assert.DoesNotContain("IsCorrect", ottoSql, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("InternalText", ottoSql, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(handwrittenSql, ottoSql, ignoreLineEndingDifferences: true, ignoreWhiteSpaceDifferences: true, ignoreAllWhiteSpace: false);
+        }
+
+        private string SelectsFromLog() =>
+            string.Join(Environment.NewLine, _sqlLog
+                .Where(m => m.Contains("SELECT", StringComparison.OrdinalIgnoreCase))
+                .Select(msg => msg[(msg.IndexOf("SELECT", StringComparison.OrdinalIgnoreCase))..]));
+
         private readonly List<string> _sqlLog = new();
+
+        // Fixture: nested collections (collection of collections), mirroring the O1 report scenario.
+
+        private sealed class StoryDetailDto
+        {
+            public int Id { get; set; }
+            public string? Name { get; set; }
+            public List<StoryNodeDto>? Nodes { get; set; }
+        }
+
+        private sealed class StoryNodeDto
+        {
+            public int Id { get; set; }
+            public string? Title { get; set; }
+            public List<QuizOptionDto>? Options { get; set; }
+        }
+
+        private sealed class QuizOptionDto
+        {
+            public int Id { get; set; }
+            public string? Label { get; set; }
+        }
+
+        private sealed class StoryEntity
+        {
+            public int Id { get; set; }
+            public string? Name { get; set; }
+            public List<StoryNodeEntity> Nodes { get; set; } = new();
+        }
+
+        private sealed class StoryNodeEntity
+        {
+            public int Id { get; set; }
+            public string? Title { get; set; }
+            public string? InternalText { get; set; }
+            public List<QuizOptionEntity> Options { get; set; } = new();
+        }
+
+        private sealed class QuizOptionEntity
+        {
+            public int Id { get; set; }
+            public string? Label { get; set; }
+            public bool IsCorrect { get; set; }
+        }
+
+        private sealed class StoryDb : DbContext
+        {
+            private readonly DbContextOptions<StoryDb> _options;
+            public StoryDb(DbContextOptions<StoryDb> options) : base(options) => _options = options;
+            public DbSet<StoryEntity> Stories => Set<StoryEntity>();
+            public DbSet<StoryNodeEntity> StoryNodes => Set<StoryNodeEntity>();
+            public DbSet<QuizOptionEntity> QuizOptions => Set<QuizOptionEntity>();
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<StoryEntity>(e =>
+                {
+                    e.HasKey(s => s.Id);
+                    e.HasMany(s => s.Nodes).WithOne().HasForeignKey("StoryId");
+                });
+                modelBuilder.Entity<StoryNodeEntity>(e =>
+                {
+                    e.HasKey(n => n.Id);
+                    e.HasMany(n => n.Options).WithOne().HasForeignKey("NodeId");
+                });
+                modelBuilder.Entity<QuizOptionEntity>().HasKey(o => o.Id);
+            }
+        }
 
         // ---------------- Expression inspector ----------------
 

@@ -11,7 +11,10 @@ namespace OttoMapper.Mapping
     /// from configured maps and naming conventions. Unlike <see cref="ObjectMapExpressionBuilder"/>, which
     /// compiles to a runtime delegate, this builder emits a pure <c>MemberInit</c> tree using only constructs a
     /// LINQ provider (e.g. EF Core) can translate to SQL: property accesses, constructor + member bindings,
-    /// inline <c>Enumerable.Select</c> for collections, and inlined <c>MapFrom</c> resolver bodies.
+    /// inline <c>Enumerable.Select</c> for collections, and inlined <c>MapFrom</c> resolver bodies. Collection
+    /// projections carry no null guards by default (<see cref="MapperConfiguration.ProjectionNullGuards"/>):
+    /// a collection navigation is never null for a query provider, and the guard defeats clean SQL
+    /// translation.
     /// </summary>
     internal sealed class ProjectionBuilder
     {
@@ -232,8 +235,10 @@ namespace OttoMapper.Mapping
                 var elemBody = ParameterReplacer.Replace(elemLambda.Body, elemLambda.Parameters[0], x);
 
                 // Guard null collection elements (reference element types) so a null row maps to null rather
-                // than throwing; EF translates this as CASE WHEN x IS NULL THEN NULL ELSE ... .
-                if (MappingHelpers.CanBeNull(srcElem))
+                // than throwing. Only for the in-memory path: a query provider like EF Core handles null rows
+                // of a navigation itself, and the explicit guard forces it to materialize whole entity columns
+                // outside the DTO (see ProjectionNullGuards).
+                if (EmitNullGuards && MappingHelpers.CanBeNull(srcElem))
                 {
                     elemBody = Expression.Condition(
                         Expression.Equal(x, Expression.Default(srcElem)),
@@ -253,7 +258,11 @@ namespace OttoMapper.Mapping
                 projected = Materialize(selectCall, dstElem, dstElem, dstPropType);
             }
 
-            if (MappingHelpers.CanBeNull(srcPropType))
+            // Guard a null source collection. Only for the in-memory path: for a LINQ provider a collection
+            // navigation is never null, and `s.Nodes == null ? null : ...` is not cleanly SQL-translatable —
+            // EF then loads the navigation a second time as whole entities, duplicating joins
+            // (see ProjectionNullGuards).
+            if (EmitNullGuards && MappingHelpers.CanBeNull(srcPropType))
             {
                 return Expression.Condition(
                     Expression.Equal(srcAccess, Expression.Default(srcPropType)),
@@ -263,6 +272,8 @@ namespace OttoMapper.Mapping
 
             return projected;
         }
+
+        private bool EmitNullGuards => _config.ProjectionNullGuards;
 
         /// <summary>
         /// Materializes an <see cref="IEnumerable{TElement}"/> expression into the destination collection type

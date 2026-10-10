@@ -177,8 +177,14 @@ non-generic `BuildProjection(Type, Type)`) and pass it to `Queryable.Select` you
 - Convention members of the same type (direct assignment).
 - Numeric → numeric conversions (`int` → `long`, `decimal` → `double`, incl. nullable wrapping) emitted as
   explicit casts, which EF Core translates.
-- Nested objects (recursively projected and inlined, with a null guard).
-- Collections via inline `Enumerable.Select(...).ToList()` / `.ToArray()`, with a null guard.
+- Nested objects (recursively projected and inlined, with a null guard on the source navigation).
+- Collections via inline `Enumerable.Select(...).ToList()` / `.ToArray()`. No null guards by default: a
+  collection navigation is never null in SQL, and a guard like `s.Nodes == null ? null : ...` defeats clean
+  SQL translation — EF Core then loads the collection a second time as whole entities, duplicating joins and
+  pulling columns outside the DTO into the query (AutoMapper runs `ProjectTo` without guards for the same
+  reason). Set `MapperConfiguration.ProjectionNullGuards = true` to add both the collection and the element
+  null guards when projections are evaluated in-memory (LINQ-to-Objects) over sources where null
+  collections / null elements must map to `null` instead of throwing.
 - `opt.MapFrom(s => ...)` **expression** resolvers — the resolver body is inlined into the projection so
   custom SQL-side projections (e.g. `s => s.FirstName + " " + s.LastName`) translate.
 - `Ignore`d destination members are skipped.

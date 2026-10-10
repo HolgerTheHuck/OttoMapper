@@ -5,8 +5,8 @@
     <IsPackable>true</IsPackable>
     <PackageId>OttoMapper.Mapping</PackageId>
     <Description>Fast object mapper with AutoMapper-like configuration, explicit map validation, nested mapping, collection mapping, and performance-focused runtime delegates.</Description>
-    <PackageReleaseNotes>Added IQueryable projection (ProjectTo / BuildProjection): translate configured maps into EF-translatable expressions so EF Core can project server-side. Additive and backwards compatible; behavior is unchanged unless ProjectTo/BuildProjection is used. MapFrom expression resolvers are now preserved for inlining into projections.</PackageReleaseNotes>
-    <Version>1.2.0</Version>
+    <PackageReleaseNotes>Fix (ProjectTo): collection projections no longer emit null guards, which EF Core could not translate cleanly — collections were loaded a second time as whole entities, duplicating joins and pulling columns outside the DTO into the SQL. New opt-in MapperConfiguration.ProjectionNullGuards switch for in-memory (LINQ-to-Objects) projections over null-carrying sources.</PackageReleaseNotes>
+    <Version>1.3.0</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>

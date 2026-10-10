@@ -40,6 +40,19 @@ namespace OttoMapper.Mapping
         public bool UseGeneratedMaps { get; set; } = true;
 
         /// <summary>
+        /// Gets or sets a value indicating whether projections built via <c>ProjectTo</c> /
+        /// <c>BuildProjection</c> emit null guards around collection projections and their elements.
+        /// Defaults to <c>false</c>: the guards execute fine in-memory, but against a SQL provider (EF Core)
+        /// <c>s.Nodes == null ? null : s.Nodes.Select(...)</c> is not translated cleanly — EF then loads the
+        /// collection navigation a second time as whole entities, duplicating joins and pulling columns
+        /// outside the DTO into the SQL. AutoMapper runs <c>ProjectTo</c> without them for the same reason
+        /// (a collection navigation is never null in SQL; an empty collection yields an empty list).
+        /// Set to <c>true</c> only when projections are evaluated in-memory (LINQ-to-Objects) over sources
+        /// where null collections / null elements must map to <c>null</c> instead of throwing.
+        /// </summary>
+        public bool ProjectionNullGuards { get; set; }
+
+        /// <summary>
         /// Initializes a new empty mapper configuration.
         /// </summary>
         public MapperConfiguration()
